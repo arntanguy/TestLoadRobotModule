@@ -76,19 +76,22 @@ std::string surfacesToXML(const std::string & robotName, const std::vector<std::
 
 std::vector<std::shared_ptr<Surface>> genSurfacesFromVisual(const rbd::parsers::Visual & visual)
 {
-  struct SurfaceGen
-  {
-    std::string name;
-    Eigen::Vector3d direction;
-  };
-  auto generators = std::vector<SurfaceGen>{
-    {"Front", {1, 0, 0}},
-    {"Back", {-1, 0, 0}},
-    {"Left", {0, 1, 0}},
-    {"Right", {0, -1, 0}},
-    {"Top", {0, 0, 1}},
-    {"Bottom", {0, 0, -1}}
-  };
+struct SurfaceGen
+{
+  std::string name;
+  Eigen::Vector3d direction;
+  Eigen::Vector3d rpy; // orientation in radians
+  Eigen::Vector3d rpyFlipped; // orientation in radians
+};
+
+auto generators = std::vector<SurfaceGen>{
+  {"Front",   {1, 0, 0}, {0, M_PI_2, 0}, {0, M_PI + M_PI_2, 0}},
+  {"Back",    {-1, 0, 0}, {0, -M_PI_2, 0}, {0, M_PI - M_PI_2, 0}},
+  {"Left",    {0, 1, 0}, {-M_PI_2, 0, 0}, {M_PI - M_PI_2, 0, 0}},
+  {"Right",   {0, -1, 0}, {M_PI_2, 0, 0}, {M_PI + M_PI_2, 0, 0}},
+  {"Top",     {0, 0, 1}, {0, 0, 0}, {M_PI, 0, 0}},
+  {"Bottom",  {0, 0, -1}, {M_PI, 0, 0}, {2*M_PI, 0, 0}}
+};
 
   auto surfaces = std::vector<std::shared_ptr<Surface>>{};
   surfaces.reserve(generators.size());
@@ -100,22 +103,16 @@ std::vector<std::shared_ptr<Surface>> genSurfacesFromVisual(const rbd::parsers::
     d = geom.radius;
   }
 
-  for(const auto & [name, dir] : generators)
+  for(const auto & [name, dir, rpyExterior, rpyInterior] : generators)
   {
 
-    Eigen::Vector3d z_axis = dir.normalized();
-    Eigen::Vector3d temp = (std::abs(z_axis.x()) < 0.99) ? Eigen::Vector3d::UnitX() : Eigen::Vector3d::UnitY();
-    Eigen::Vector3d x_axis = temp.cross(z_axis).normalized();
-    Eigen::Vector3d y_axis = z_axis.cross(x_axis).normalized();
 
-    Eigen::Matrix3d rotation;
-    rotation.col(0) = x_axis;
-    rotation.col(1) = y_axis;
-    rotation.col(2) = z_axis; // z is aligned with dir
+    Eigen::Matrix3d rotation = mc_rbdyn::rpyToMat(rpyExterior).inverse();
+    Eigen::Matrix3d rotationFlipped = mc_rbdyn::rpyToMat(rpyInterior).inverse();
 
     surfaces.emplace_back(std::make_shared<mc_rbdyn::PlanarSurface>
        (
-          name,
+          name + "_exterior",
           visual.name, // bodyName
           sva::PTransformd(rotation, dir * d), // X_b_s
 
@@ -127,6 +124,9 @@ std::vector<std::shared_ptr<Surface>> genSurfacesFromVisual(const rbd::parsers::
           {-d, d}
           }
         ));
+    surfaces.emplace_back(surfaces.back()->copy());
+    surfaces.back()->name(name + "_interior");
+    surfaces.back()->X_b_s(sva::PTransformd{rotationFlipped, dir * d});
   }
 
   return surfaces;
