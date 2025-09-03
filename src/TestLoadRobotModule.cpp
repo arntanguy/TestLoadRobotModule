@@ -38,6 +38,21 @@ geometry:
   sphere:
     radius: 0.5
     )";
+static auto boxYaml = R"(
+name: box
+origin:
+  translation: [0, 0, 0]
+  rotation: [0, 0, 0]
+material:
+  color:
+    r: 1
+    g: 0
+    b: 0
+    a: 1
+geometry:
+  box:
+    size: [1., 0.5, 2.]
+    )";
 
 
 }
@@ -45,9 +60,13 @@ geometry:
 TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt, const mc_rtc::Configuration & config)
 : mc_control::fsm::Controller(rm, dt, config)
 {
-  rbd::parsers::Visual visual = mc_rtc::Configuration::fromYAMLData(mc_rbdyn::sphereYaml);
-  auto rmV = mc_rbdyn::robotModuleFromVisual("sphere", visual);
-  this->loadRobot(rmV, "sphere");
+  // rbd::parsers::Visual visual = mc_rtc::Configuration::fromYAMLData(mc_rbdyn::sphereYaml);
+  // auto rmV = mc_rbdyn::robotModuleFromVisual("sphere", visual);
+  // this->loadRobot(rmV, "sphere");
+
+  rbd::parsers::Visual visual = mc_rtc::Configuration::fromYAMLData(mc_rbdyn::boxYaml);
+  auto rmV = mc_rbdyn::robotModuleFromVisual("box", visual);
+  this->loadRobot(rmV, "box");
   mc_rtc::log::success("TestLoadRobotModule init done ");
 }
 

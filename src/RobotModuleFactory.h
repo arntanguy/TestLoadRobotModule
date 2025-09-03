@@ -96,13 +96,6 @@ auto generators = std::vector<SurfaceGen>{
   auto surfaces = std::vector<std::shared_ptr<Surface>>{};
   surfaces.reserve(generators.size());
 
-  double d = 0;
-  if(visual.geometry.type == rbd::parsers::Geometry::SPHERE)
-  {
-    auto geom = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::SPHERE>(const_cast<rbd::parsers::Visual&>(visual));
-    d = geom.radius;
-  }
-
   for(const auto & [name, dir, rpyExterior, rpyInterior] : generators)
   {
 
@@ -110,23 +103,79 @@ auto generators = std::vector<SurfaceGen>{
     Eigen::Matrix3d rotation = mc_rbdyn::rpyToMat(rpyExterior).inverse();
     Eigen::Matrix3d rotationFlipped = mc_rbdyn::rpyToMat(rpyInterior).inverse();
 
-    surfaces.emplace_back(std::make_shared<mc_rbdyn::PlanarSurface>
-       (
-          name + "_exterior",
-          visual.name, // bodyName
-          sva::PTransformd(rotation, dir * d), // X_b_s
+    if(visual.geometry.type == rbd::parsers::Geometry::SPHERE)
+    {
+      auto geom = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::SPHERE>(const_cast<rbd::parsers::Visual&>(visual));
+      auto d = geom.radius;
+      surfaces.emplace_back(std::make_shared<mc_rbdyn::PlanarSurface>
+         (
+            name + "_exterior",
+            visual.name, // bodyName
+            sva::PTransformd(rotation, dir * d), // X_b_s
 
-          "plastic", // materialName
-          std::vector<std::pair<double, double>>{
-          {-d, -d},
-          {d, -d},
-          {d, d},
-          {-d, d}
-          }
-        ));
-    surfaces.emplace_back(surfaces.back()->copy());
-    surfaces.back()->name(name + "_interior");
-    surfaces.back()->X_b_s(sva::PTransformd{rotationFlipped, dir * d});
+            "plastic", // materialName
+            std::vector<std::pair<double, double>>{
+            {-d, -d},
+            {d, -d},
+            {d, d},
+            {-d, d}
+            }
+          ));
+      surfaces.emplace_back(surfaces.back()->copy());
+      surfaces.back()->name(name + "_interior");
+      surfaces.back()->X_b_s(sva::PTransformd{rotationFlipped, dir * d});
+    }
+    else if(visual.geometry.type == rbd::parsers::Geometry::BOX)
+    {
+      auto geom = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::BOX>(const_cast<rbd::parsers::Visual&>(visual));
+      const auto & size = geom.size;
+      double hx = size.x() / 2.0;
+      double hy = size.y() / 2.0;
+      double hz = size.z() / 2.0;
+
+      std::vector<std::pair<double, double>> points;
+      if(std::abs(dir.x()) == 1) // Front/Back face (YZ plane)
+      {
+        points = {
+          {-hz, -hy},
+          {hz, -hy},
+          {hz, hy},
+          {-hz, hy}
+        };
+      }
+      else if(std::abs(dir.y()) == 1) // Left/Right face (XZ plane)
+      {
+        points = {
+          {-hx, -hz},
+          {hx, -hz},
+          {hx, hz},
+          {-hx, hz}
+        };
+      }
+      else if(std::abs(dir.z()) == 1) // Top/Bottom face (XY plane)
+      {
+        points = {
+          {-hx, -hy},
+          {hx, -hy},
+          {hx, hy},
+          {-hx, hy}
+        };
+      }
+
+      surfaces.emplace_back(std::make_shared<mc_rbdyn::PlanarSurface>
+          (
+           name + "_exterior",
+           visual.name, // bodyName
+           sva::PTransformd(rotation, dir * (std::abs(dir.x()) ? hx : std::abs(dir.y()) ? hy : hz)), // X_b_s
+
+           "plastic", // materialName
+           points
+          ));
+      surfaces.emplace_back(surfaces.back()->copy());
+      surfaces.back()->name(name + "_interior");
+      surfaces.back()->X_b_s(sva::PTransformd{rotationFlipped, dir * (std::abs(dir.x()) ? hx : std::abs(dir.y()) ? hy : hz)});
+
+    }
   }
 
   return surfaces;
@@ -143,6 +192,25 @@ inline RobotModulePtr robotModuleFromVisual(
   pr.collision[name] = { visual };
 
   auto rbInertia = sva::RBInertiad{};
+  double mass = 1.0;
+  Eigen::Vector3d com = Eigen::Vector3d::Zero();
+  if(visual.geometry.type == rbd::parsers::Geometry::BOX)
+  {
+    Eigen::Vector3d size = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::BOX>(const_cast<rbd::parsers::Visual&>(visual)).size;
+    Eigen::Matrix3d inertiaM;
+    // XXX check
+    inertiaM << (1.0/12.0) * (size.y()*size.y() + size.z()*size.z()), 0, 0,
+                0, (1.0/12.0) * (size.x()*size.x() + size.z()*size.z()), 0,
+                0, 0, (1.0/12.0) * (size.x()*size.x() + size.y()*size.y());
+
+    inertiaM = inertiaM.selfadjointView<Eigen::Upper>();
+    rbInertia = sva::RBInertiad(mass, com, inertiaM);
+  }
+  else
+  {
+    // TODO
+    rbInertia = sva::RBInertiad(mass, com, Eigen::Matrix3d::Identity());
+  }
   rbd::Body body(rbInertia, name);
   pr.mbg.addBody(body);
 
