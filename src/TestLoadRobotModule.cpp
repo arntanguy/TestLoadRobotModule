@@ -1,9 +1,5 @@
 #include "TestLoadRobotModule.h"
-#include "RobotModuleFactory.h"
-
-
-namespace mc_rbdyn
-{
+#include <mc_rbdyn/RobotModule_visual.h>
 
 
 // FIXME: cylinder not supported in mc-rtc-magnum
@@ -56,11 +52,8 @@ geometry:
 # only mass should be required for basic shapes
 inertia:
   mass: 10.0
-  momentum: [0., 0., 0.]
     )";
 
-
-}
 
 TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt, const mc_rtc::Configuration & config)
 : mc_control::fsm::Controller(rm, dt, config)
@@ -69,8 +62,8 @@ TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt,
   // auto rmV = mc_rbdyn::robotModuleFromVisual("sphere", visual);
   // this->loadRobot(rmV, "sphere");
 
-  auto boxConfig = mc_rtc::Configuration::fromYAMLData(mc_rbdyn::boxYaml);
-  auto rmV = mc_rbdyn::robotModuleFromVisualConfig("box", boxConfig);
+  auto boxConfig = mc_rtc::Configuration::fromYAMLData(boxYaml);
+  auto rmV = mc_rbdyn::robotModuleFromVisual("box", boxConfig);
   this->loadRobot(rmV, "box");
   mc_rtc::log::success("TestLoadRobotModule init done ");
 }
@@ -84,5 +77,4 @@ void TestLoadRobotModule::reset(const mc_control::ControllerResetData & reset_da
 {
   mc_control::fsm::Controller::reset(reset_data);
 }
-
 

@@ -20,6 +20,40 @@ VerboseStateFactory: false
 robots:
   ground:
     module: env/ground
+  box2:
+    init_pos:
+      translation: [0, 1.0, 0.5]
+    visual:
+      name: box
+      origin:
+        translation: [0, 0, 0]
+        rotation: [0, 0, 0]
+      material:
+        color:
+          r: 0 
+          g: 0 
+          b: 1 
+          a: 1
+      geometry:
+        box:
+          size: [1, 0.5, 1.5]
+      inertia:
+        mass: 5
+  sphere:
+    visual:
+      name: sphere
+      origin:
+        translation: [0, 0, 0]
+        rotation: [0, 0, 0]
+      material:
+        color:
+          r: 0 
+          g: 1 
+          b: 0
+          a: 1
+      geometry:
+        sphere:
+          radius: 0.5
 # General constraints, always on
 constraints:
 - type: contact
