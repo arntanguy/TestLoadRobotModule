@@ -52,6 +52,11 @@ material:
 geometry:
   box:
     size: [1., 0.5, 2.]
+# inertia is provided in the same format as RBInertiad config
+# only mass should be required for basic shapes
+inertia:
+  mass: 10.0
+  momentum: [0., 0., 0.]
     )";
 
 
@@ -64,8 +69,8 @@ TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt,
   // auto rmV = mc_rbdyn::robotModuleFromVisual("sphere", visual);
   // this->loadRobot(rmV, "sphere");
 
-  rbd::parsers::Visual visual = mc_rtc::Configuration::fromYAMLData(mc_rbdyn::boxYaml);
-  auto rmV = mc_rbdyn::robotModuleFromVisual("box", visual);
+  auto boxConfig = mc_rtc::Configuration::fromYAMLData(mc_rbdyn::boxYaml);
+  auto rmV = mc_rbdyn::robotModuleFromVisualConfig("box", boxConfig);
   this->loadRobot(rmV, "box");
   mc_rtc::log::success("TestLoadRobotModule init done ");
 }

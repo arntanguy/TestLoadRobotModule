@@ -16,6 +16,113 @@ namespace fs = std::filesystem;
 namespace mc_rbdyn
 {
 
+/*
+ * Computes the inertia of a box-shaped rigid body.
+ *
+ * Assumptions:
+ * - The box is a solid, homogeneous object.
+ * - The mass is uniformly distributed.
+ * - The inertia is computed about the center of mass.
+ * - The box is aligned with the coordinate axes.
+ *
+ * @param mass Mass of the box.
+ * @param size Dimensions of the box (length, width, height).
+ * @return Inertia of the box as sva::RBInertiad.
+ */
+sva::RBInertiad computeBoxInertia(double mass, const Eigen::Vector3d & size)
+{
+  /* Compute principal moments of inertia for a box:
+     I_xx = (1/12) * mass * (size.y^2 + size.z^2)
+     I_yy = (1/12) * mass * (size.x^2 + size.z^2)
+     I_zz = (1/12) * mass * (size.x^2 + size.y^2)
+     Construct the inertia matrix as a diagonal matrix */
+  double I_xx = (1.0 / 12.0) * mass * (size.y() * size.y() + size.z() * size.z());
+  double I_yy = (1.0 / 12.0) * mass * (size.x() * size.x() + size.z() * size.z());
+  double I_zz = (1.0 / 12.0) * mass * (size.x() * size.x() + size.y() * size.y());
+  Eigen::Matrix3d inertia = Eigen::Matrix3d::Zero();
+  inertia(0, 0) = I_xx;
+  inertia(1, 1) = I_yy;
+  inertia(2, 2) = I_zz;
+  return sva::RBInertiad(mass, Eigen::Vector3d::Zero(), inertia);
+}
+
+/*
+ * Computes the inertia of a sphere-shaped rigid body.
+ *
+ * Assumptions:
+ * - The sphere is solid and homogeneous.
+ * - The mass is uniformly distributed.
+ * - The inertia is computed about the center of mass.
+ *
+ * @param mass Mass of the sphere.
+ * @param radius Radius of the sphere.
+ * @return Inertia of the sphere as sva::RBInertiad.
+ */
+sva::RBInertiad computeSphereInertia(double mass, double radius)
+{
+  return sva::RBInertiad(mass, Eigen::Vector3d::Zero(), (2. / 5.) * mass * radius * radius * Eigen::Matrix3d::Identity());
+}
+
+/**
+ * @brief Computes the inertia of a solid cylinder.
+ *
+ * This function calculates the rotational inertia tensor for a cylinder given its mass, radius, and length.
+ *
+ * @param mass Mass of the cylinder.
+ * @param radius Radius of the cylinder.
+ * @param length Length of the cylinder.
+ * @return sva::RBInertiad Inertia of the cylinder.
+ */
+sva::RBInertiad computeCylinderInertia(double mass, double radius, double length)
+{
+  double I_xx = (1.0 / 12.0) * mass * (3 * radius * radius + length * length);
+  double I_yy = I_xx;
+  double I_zz = 0.5 * mass * radius * radius;
+  Eigen::Matrix3d inertia = Eigen::Matrix3d::Zero();
+  inertia(0, 0) = I_xx;
+  inertia(1, 1) = I_yy;
+  inertia(2, 2) = I_zz;
+  return sva::RBInertiad(mass, Eigen::Vector3d::Zero(), inertia);
+}
+
+/**
+ * @brief Computes the inertia from a visual geometry description.
+ *
+ * This function determines the inertia based on the type of geometry (box, sphere, etc.) and its parameters.
+ *
+ * @param visual The visual geometry description.
+ * @param mass The mass of the object.
+ * @return sva::RBInertiad The computed inertia.
+ * @throws Throws if the geometry type is unsupported.
+ */
+sva::RBInertiad computeInertiaFromVisual(const rbd::parsers::Visual & visual, double mass)
+{
+  switch(visual.geometry.type)
+  {
+    case rbd::parsers::Geometry::BOX:
+      {
+        auto geom = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::BOX>(const_cast<rbd::parsers::Visual&>(visual));
+        return computeBoxInertia(mass, geom.size);
+      }
+      break;
+    case rbd::parsers::Geometry::SPHERE:
+      {
+        auto geom = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::SPHERE>(const_cast<rbd::parsers::Visual&>(visual));
+        return computeSphereInertia(mass, geom.radius);
+      }
+      break;
+    case rbd::parsers::Geometry::CYLINDER:
+      {
+        auto geom = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::CYLINDER>(const_cast<rbd::parsers::Visual&>(visual));
+        return computeCylinderInertia(mass, geom.radius, geom.length);
+      }
+      break;
+    default:
+      mc_rtc::log::error_and_throw("computeIntertiaFromVisual: Unsupported geometry type {}", visual.geometry.type);
+  }
+}
+
+
 std::string make_temporary_path(const std::string & prefix)
 {
   auto tmp = fs::temp_directory_path();
@@ -184,6 +291,7 @@ auto generators = std::vector<SurfaceGen>{
 inline RobotModulePtr robotModuleFromVisual(
     const std::string & name,
     const rbd::parsers::Visual & visual,
+    const sva::RBInertiad & inertia,
     bool isFixed = true
     )
 {
@@ -191,27 +299,7 @@ inline RobotModulePtr robotModuleFromVisual(
   pr.visual[name] = { visual };
   pr.collision[name] = { visual };
 
-  auto rbInertia = sva::RBInertiad{};
-  double mass = 1.0;
-  Eigen::Vector3d com = Eigen::Vector3d::Zero();
-  if(visual.geometry.type == rbd::parsers::Geometry::BOX)
-  {
-    Eigen::Vector3d size = mc_rtc::details::getVisualGeometry<rbd::parsers::Geometry::BOX>(const_cast<rbd::parsers::Visual&>(visual)).size;
-    Eigen::Matrix3d inertiaM;
-    // XXX check
-    inertiaM << (1.0/12.0) * (size.y()*size.y() + size.z()*size.z()), 0, 0,
-                0, (1.0/12.0) * (size.x()*size.x() + size.z()*size.z()), 0,
-                0, 0, (1.0/12.0) * (size.x()*size.x() + size.y()*size.y());
-
-    inertiaM = inertiaM.selfadjointView<Eigen::Upper>();
-    rbInertia = sva::RBInertiad(mass, com, inertiaM);
-  }
-  else
-  {
-    // TODO
-    rbInertia = sva::RBInertiad(mass, com, Eigen::Matrix3d::Identity());
-  }
-  rbd::Body body(rbInertia, name);
+  rbd::Body body(inertia, name);
   pr.mbg.addBody(body);
 
   pr.mb = pr.mbg.makeMultiBody(name, isFixed);
@@ -267,4 +355,56 @@ inline RobotModulePtr robotModuleFromVisual(
 
   return rmPtr;
 }
+
+inline RobotModulePtr robotModuleFromVisual(
+    const std::string & name,
+    const rbd::parsers::Visual & visual,
+    double mass,
+    bool isFixed = true
+    )
+{
+    return robotModuleFromVisual(name, visual, computeInertiaFromVisual(visual, mass), isFixed);
+}
+
+
+inline RobotModulePtr robotModuleFromVisualConfig(const std::string & name,
+    mc_rtc::Configuration config)
+{
+  double mass = 0;
+  std::optional<sva::RBInertiad> inertia = std::nullopt;
+  if(auto inertiaC = config.find("inertia"))
+  {
+    if(auto mass_ = inertiaC->find("mass"))
+    {
+      mass = *mass_;
+    }
+    else
+    {
+      mc_rtc::log::error_and_throw("robotModuleFromVisualConfig: inertia provided but no mass");
+    }
+
+    if(auto spatialMomentum = inertiaC->find("momentum"))
+    {
+      if(auto inertia_ = inertiaC->find("inertia"))
+      {
+        inertia = sva::RBInertiad(mass, *spatialMomentum, *inertia_);
+      }
+      else
+      {
+        mc_rtc::log::error_and_throw("robotModuleFromVisualConfig: momentum provided but no inertia matrix");
+      }
+    }
+  }
+
+  auto visual = static_cast<rbd::parsers::Visual>(config);
+  if(inertia)
+  {
+    return robotModuleFromVisual(name, visual, *inertia, config("fixed", false));
+  }
+  else
+  {
+    return robotModuleFromVisual(name, visual, mass, config("fixed", false));
+  }
+}
+
 }
