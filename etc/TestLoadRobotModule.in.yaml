@@ -39,6 +39,7 @@ robots:
           size: [1, 0.5, 1.5]
       inertia:
         mass: 5
+      fixed: false
   sphere:
     visual:
       name: sphere

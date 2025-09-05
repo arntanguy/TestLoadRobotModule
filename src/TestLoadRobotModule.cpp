@@ -66,10 +66,29 @@ TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt,
   auto rmV = mc_rbdyn::robotModuleFromVisual("box", boxConfig);
   this->loadRobot(rmV, "box");
   mc_rtc::log::success("TestLoadRobotModule init done ");
+
+  setGUI.addToGUI(*gui(),
+      {"Set GUI"},
+      trackedSet,
+      [](const std::string & elem, double interpValue) { mc_rtc::log::info("Updating {}: {}", elem, interpValue); },
+      [](const std::string & elem, double interpValue) { mc_rtc::log::success("Complete {}: {}", elem, interpValue); });
+
+  gui()->addElement({"Set GUI"},
+      mc_rtc::gui::Button("Add element ADDED to set", [this]() {
+        trackedSet.insert("ADDED");
+        }),
+      mc_rtc::gui::Button("Remove element ADDED from set", [this]() {
+        trackedSet.erase("ADDED");
+        }),
+      mc_rtc::gui::Button("Remove element box from set", [this]() {
+        trackedSet.erase("box");
+        })
+      );
 }
 
 bool TestLoadRobotModule::run()
 {
+  setGUI.update();
   return mc_control::fsm::Controller::run();
 }
 
