@@ -70,6 +70,7 @@ TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt,
   setGUI.addToGUI(*gui(),
       {"Set GUI"},
       trackedSet,
+      BidirectionalGUIInterpolator<std::string>(0.2, 0.8, timeStep, 4.),
       [](const std::string & elem, double interpValue) { mc_rtc::log::info("Updating cb {}: {}", elem, interpValue);  },
       [](const std::string & elem, double interpValue) { mc_rtc::log::success("Complete {}: {}", elem, interpValue); });
 
