@@ -70,7 +70,7 @@ TestLoadRobotModule::TestLoadRobotModule(mc_rbdyn::RobotModulePtr rm, double dt,
   setGUI.addToGUI(*gui(),
       {"Set GUI"},
       trackedSet,
-      [](const std::string & elem, double interpValue) { mc_rtc::log::info("Updating {}: {}", elem, interpValue); },
+      [](const std::string & elem, double interpValue) { mc_rtc::log::info("Updating cb {}: {}", elem, interpValue);  },
       [](const std::string & elem, double interpValue) { mc_rtc::log::success("Complete {}: {}", elem, interpValue); });
 
   gui()->addElement({"Set GUI"},
